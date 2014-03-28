@@ -103,6 +103,8 @@ void ofxFreenectDevice::update() {
             this->unlock();
         }
     }
+    else
+        bIsFrameNewVideo = false;
     
     if (bNeedsUpdateDepth) {
         if (this->lock()) {
@@ -113,6 +115,8 @@ void ofxFreenectDevice::update() {
             this->unlock();
         }
     }
+    else
+        bIsFrameNewDepth = false;
 }
 
 //--------------------------------------------------------------
@@ -136,12 +140,17 @@ void ofxFreenectDevice::drawDepth(float x, float y, float w, float h) {
 }
 
 //--------------------------------------------------------------
+void ofxFreenectDevice::applyFlag(freenect_flag flag, freenect_flag_value value) {
+    pendingFlags[flag] = value;
+}
+
+//--------------------------------------------------------------
 void ofxFreenectDevice::rgb_cb(freenect_device *dev, void *rgb, uint32_t timestamp) {
     
     ofxFreenectDevice* fdevice = (ofxFreenectDevice*)freenect_get_user(dev);
-    if (fdevice != NULL) {
-        fdevice->lock();
+    if (fdevice != NULL && fdevice->lock()) {
         swap(fdevice->videoPixels, fdevice->videoPixelsBack);
+        fdevice->bIsFrameNewVideo = false;
         freenect_set_video_buffer(dev, fdevice->videoPixelsBack.getPixels());
         fdevice->bNeedsUpdateVideo = true;
         fdevice->unlock();
@@ -151,9 +160,9 @@ void ofxFreenectDevice::rgb_cb(freenect_device *dev, void *rgb, uint32_t timesta
 void ofxFreenectDevice::depth_cb(freenect_device *dev, void *v_depth, uint32_t timestamp) {
     
     ofxFreenectDevice* fdevice = (ofxFreenectDevice*)freenect_get_user(dev);
-    if (fdevice != NULL) {
-        fdevice->lock();
+    if (fdevice != NULL && fdevice->lock()) {
         swap(fdevice->depthPixels, fdevice->depthPixelsBack);
+        fdevice->bIsFrameNewDepth = false;
         freenect_set_depth_buffer(dev, fdevice->depthPixelsBack.getPixels());
         fdevice->bNeedsUpdateDepth = true;
         fdevice->unlock();
@@ -197,16 +206,30 @@ void ofxFreenectDevice::threadedFunction() {
                 freenect_set_video_callback(f_dev, rgb_cb);
                 freenect_set_depth_callback(f_dev, depth_cb);
                 
-                freenect_start_video(f_dev);
-                ofSleepMillis(100);
-                freenect_start_depth(f_dev);
+                if (freenect_start_video(f_dev) < 0)
+                    ofLogError("ofxFreenectDevice", "failed to start video");
+                
+                ofSleepMillis(500);
+                
+                if (freenect_start_depth(f_dev) < 0)
+                    ofLogError("ofxFreenectDevice", "failed to start depth");
 
-                while (isThreadRunning() && freenect_process_events(f_ctx) >= 0) {}
+                while (isThreadRunning() && freenect_process_events(f_ctx) >= 0) {
+                    map<freenect_flag,freenect_flag_value>::iterator it = pendingFlags.begin();
+                    for (; it != pendingFlags.end(); ++it) {
+                        if (freenect_set_flag(f_dev, it->first, it->second) < 0) {
+                            ofLogError("ofxFreenectDevice", "failed to set flag");
+                        }
+                    }
+                    pendingFlags.clear();
+                }
                 
                 bIsOpen = false;
                 
                 freenect_stop_depth(f_dev);
+                ofSleepMillis(500);
                 freenect_stop_video(f_dev);
+                ofSleepMillis(500);
                 freenect_close_device(f_dev);
             }
         }
@@ -244,6 +267,11 @@ ofTexture & ofxFreenectDevice::getTextureReference() {
 //--------------------------------------------------------------
 ofTexture & ofxFreenectDevice::getTextureReferenceDepth() {
     return depthTexture;
+}
+
+//--------------------------------------------------------------
+bool ofxFreenectDevice::isOpen() {
+    return bIsOpen;
 }
 
 //--------------------------------------------------------------

@@ -51,6 +51,8 @@ public:
     void drawDepth(float x, float y);
     void drawDepth(float x, float y, float w, float h);
     
+    void applyFlag(freenect_flag flag, freenect_flag_value value);
+    
     // Accessors
     int getWidth();
     int getHeight();
@@ -76,6 +78,7 @@ private:
     
     freenect_frame_mode vmode;
     freenect_frame_mode dmode;
+    map<freenect_flag,freenect_flag_value> pendingFlags;
     
     bool bIsOpen;
 	bool bIsFrameNewVideo, bIsFrameNewDepth;

@@ -143,6 +143,10 @@ void ofxFreenectDevice::drawDepth(float x, float y, float w, float h) {
 void ofxFreenectDevice::applyFlag(freenect_flag flag, freenect_flag_value value) {
     pendingFlags[flag] = value;
 }
+//--------------------------------------------------------------
+void ofxFreenectDevice::applyCommand(int command) {
+    pendingCommands.push_back(command);
+}
 
 //--------------------------------------------------------------
 void ofxFreenectDevice::rgb_cb(freenect_device *dev, void *rgb, uint32_t timestamp) {
@@ -209,12 +213,11 @@ void ofxFreenectDevice::threadedFunction() {
                 if (freenect_start_video(f_dev) < 0)
                     ofLogError("ofxFreenectDevice", "failed to start video");
                 
-                ofSleepMillis(500);
-                
                 if (freenect_start_depth(f_dev) < 0)
                     ofLogError("ofxFreenectDevice", "failed to start depth");
 
                 while (isThreadRunning() && freenect_process_events(f_ctx) >= 0) {
+                    
                     map<freenect_flag,freenect_flag_value>::iterator it = pendingFlags.begin();
                     for (; it != pendingFlags.end(); ++it) {
                         if (freenect_set_flag(f_dev, it->first, it->second) < 0) {
@@ -222,6 +225,21 @@ void ofxFreenectDevice::threadedFunction() {
                         }
                     }
                     pendingFlags.clear();
+                    
+                    vector<int>::iterator is = pendingCommands.begin();
+                    for (; is != pendingCommands.end(); ++is) {
+                        switch (is[0]) {
+                            case OFX_FREENECT_CMD_START_VIDEO:
+                                freenect_start_video(f_dev);break;
+                            case OFX_FREENECT_CMD_START_DEPTH:
+                                freenect_stop_depth(f_dev);break;
+                            case OFX_FREENECT_CMD_STOP_VIDEO:
+                                freenect_stop_video(f_dev);break;
+                            case OFX_FREENECT_CMD_STOP_DEPTH:
+                                freenect_stop_depth(f_dev);break;
+                        }
+                    }
+                    pendingCommands.clear();
                 }
                 
                 bIsOpen = false;
@@ -234,7 +252,7 @@ void ofxFreenectDevice::threadedFunction() {
             }
         }
         else {
-            ofLogNotice("ofxFreenectDevice", "no devices found");
+            //ofLogNotice("ofxFreenectDevice", "no devices found");
             ofSleepMillis(1000);
         }
     }

@@ -15,6 +15,12 @@
 #include <libusb.h>
 #endif
 
+#define OFX_FREENECT_CMD_START_VIDEO     1
+#define OFX_FREENECT_CMD_START_DEPTH     2
+#define OFX_FREENECT_CMD_STOP_VIDEO      3
+#define OFX_FREENECT_CMD_STOP_DEPTH      4
+
+
 // FREENECT CONTEXT
 class ofxFreenectDepthTable;
 
@@ -41,7 +47,6 @@ public:
     ofxFreenectDevice();
     ~ofxFreenectDevice();
 
-    void init();
     void open();
     void close();
     void update();
@@ -52,6 +57,7 @@ public:
     void drawDepth(float x, float y, float w, float h);
     
     void applyFlag(freenect_flag flag, freenect_flag_value value);
+    void applyCommand(int command);
     
     // Accessors
     int getWidth();
@@ -79,6 +85,7 @@ private:
     freenect_frame_mode vmode;
     freenect_frame_mode dmode;
     map<freenect_flag,freenect_flag_value> pendingFlags;
+    vector<int> pendingCommands;
     
     bool bIsOpen;
 	bool bIsFrameNewVideo, bIsFrameNewDepth;

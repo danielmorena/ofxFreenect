@@ -19,6 +19,8 @@
 #define OFX_FREENECT_CMD_START_DEPTH     2
 #define OFX_FREENECT_CMD_STOP_VIDEO      3
 #define OFX_FREENECT_CMD_STOP_DEPTH      4
+#define OFX_FREENECT_CMD_WAIT            5
+#define OFX_FREENECT_CMD_REOPEN          6
 
 
 // FREENECT CONTEXT
@@ -87,7 +89,7 @@ private:
     map<freenect_flag,freenect_flag_value> pendingFlags;
     vector<int> pendingCommands;
     
-    bool bIsOpen;
+    bool bIsOpen, bWasDisconnected;
 	bool bIsFrameNewVideo, bIsFrameNewDepth;
 	bool bNeedsUpdateVideo, bNeedsUpdateDepth;
     
@@ -106,7 +108,7 @@ public:
     void apply(uint16_t* pixels, int count);
     
     void generateLinear();
-    void generateExponential(float power = 3, float multiply = 6);
+    void generateExponential(float power = 3, float multiply = 6, bool inverse = false);
 
 private:
     uint16_t table[2048];

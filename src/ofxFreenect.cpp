@@ -48,10 +48,11 @@ int ofxFreenectContext::numDevices() {
 //--------------------------------------------------------------
 ofxFreenectDevice::ofxFreenectDevice() {
     bIsOpen = false;
+    bWasDisconnected = false;
     bIsFrameNewVideo = bIsFrameNewDepth = false;
     bNeedsUpdateVideo = bNeedsUpdateDepth = false;
     depthTable = new ofxFreenectDepthTable();
-    depthTable->generateExponential();
+    depthTable->generateExponential(3, 6, true);
 }
 
 //--------------------------------------------------------------
@@ -181,10 +182,12 @@ void ofxFreenectDevice::threadedFunction() {
         return;
     }
     
+    //freenect_set_log_level(f_ctx, FREENECT_LOG_SPEW);
+    
     while (isThreadRunning()) {
 
         if (freenect_num_devices(f_ctx) > 0) {
-
+            
             if (freenect_open_device(f_ctx, &f_dev, 0) < 0) {
                 ofLogError("ofxFreenectDevice", "failed to open device");
                 ofSleepMillis(1000);
@@ -216,7 +219,11 @@ void ofxFreenectDevice::threadedFunction() {
                 if (freenect_start_depth(f_dev) < 0)
                     ofLogError("ofxFreenectDevice", "failed to start depth");
 
-                while (isThreadRunning() && freenect_process_events(f_ctx) >= 0) {
+                struct timeval timeout;
+                timeout.tv_sec = 5;
+                timeout.tv_usec = 0;
+
+                while (isThreadRunning() && freenect_process_events_timeout(f_ctx, &timeout) >= 0) {
                     
                     map<freenect_flag,freenect_flag_value>::iterator it = pendingFlags.begin();
                     for (; it != pendingFlags.end(); ++it) {
@@ -237,12 +244,19 @@ void ofxFreenectDevice::threadedFunction() {
                                 freenect_stop_video(f_dev);break;
                             case OFX_FREENECT_CMD_STOP_DEPTH:
                                 freenect_stop_depth(f_dev);break;
+                            case OFX_FREENECT_CMD_WAIT:
+                                ofSleepMillis(5000);break;
+                        }
+                        if (is[0] == OFX_FREENECT_CMD_REOPEN) {
+                            pendingCommands.clear();
+                            goto reopen;
                         }
                     }
                     pendingCommands.clear();
                 }
-                
+            reopen:
                 bIsOpen = false;
+                bWasDisconnected = !isThreadRunning();
                 
                 freenect_stop_depth(f_dev);
                 ofSleepMillis(500);
@@ -253,7 +267,7 @@ void ofxFreenectDevice::threadedFunction() {
         }
         else {
             //ofLogNotice("ofxFreenectDevice", "no devices found");
-            ofSleepMillis(1000);
+            ofSleepMillis(500);
         }
     }
 }
@@ -328,10 +342,19 @@ void ofxFreenectDepthTable::generateLinear() {
 }
 
 //--------------------------------------------------------------
-void ofxFreenectDepthTable::generateExponential(float power, float multiply) {
-    for (int i=0; i<2048; i++) {
-        float v = i / 2047.;
-        table[i] = powf(v, power) * multiply * 0xffff;
+void ofxFreenectDepthTable::generateExponential(float power, float multiply, bool inverse) {
+    if (inverse) {
+        for (int i=0; i<2048; i++) {
+            float v = i / 2047.;
+            table[i] = 0xffff - powf(v, power) * multiply * 0xffff;
+        }
+        table[2047] = 0;
     }
-    table[2047] = 0;
+    else {
+        for (int i=0; i<2048; i++) {
+            float v = i / 2047.;
+            table[i] = powf(v, power) * multiply * 0xffff;
+        }
+        table[2047] = 0;
+    }
 }
